@@ -1,13 +1,23 @@
 package Client;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Optional;
 
+import Common.EUdpPacketType;
 import Common.HttpRequest;
 import Common.HttpResponse;
+import Common.UdpMessage;
 
 public class HttpC {
-	public static void main(String args[]) {
+	public static void main(String args[]) throws UnknownHostException {
+
+		UdpMessage Msg = new UdpMessage(EUdpPacketType.Data, (long) 1025,
+				InetAddress.getByAddress(new byte[] { 1, 2, 3, 4 }), (int) 10, new byte[] { 5, 6, 7 });
+
+		Msg.GenerateRaw();
+
 		// Print help.
 		if (args.length > 0 && args[0].equals("help")) {
 			if (args.length > 1) {
