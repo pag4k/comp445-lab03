@@ -1,6 +1,7 @@
 package Common;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -16,46 +17,51 @@ public class UdpMessage {
 	public static int UDP_MESSAGE_MAX_SIZE = HEADER_SIZE + PAYLOAD_MAX_SIZE;
 
 	private EUdpPacketType PacketType; // 1 byte
-	private Optional<Long> SequenceNumber; // 4 bytes big-endian
+	private Long SequenceNumber; // 4 bytes big-endian
 	private InetAddress Address; // 4 bytes IPv4
-	private Optional<Integer> PortNumber; // 2 bytes big-endian
+	private Integer PortNumber; // 2 bytes big-endian
 	private Optional<byte[]> PayLoad;
 
 	private UdpMessage() {
 		PacketType = null;
-		SequenceNumber = Optional.empty();
+		SequenceNumber = (long) -1;
 		Address = null;
-		PortNumber = Optional.empty();
+		PortNumber = -1;
 		PayLoad = Optional.empty();
 
 	}
 
-	public UdpMessage(EUdpPacketType PacketType, long SequenceNumber, InetAddress Address, int PortNumber,
-			byte[] PayLoad) {
-		this.PacketType = PacketType;
+	public static Optional<UdpMessage> New(EUdpPacketType PacketType, long SequenceNumber, InetAddress Address,
+			int PortNumber, byte[] PayLoad) {
+
+		UdpMessage Message = new UdpMessage();
+
+		Message.PacketType = PacketType;
 		if (SequenceNumber >= 0) {
-			this.SequenceNumber = Optional.of(SequenceNumber);
+			Message.SequenceNumber = SequenceNumber;
 		} else {
 			LOGGER.log(Level.WARNING, "SequenceNumber should not be negative.");
-			this.SequenceNumber = Optional.empty();
+			return Optional.empty();
 		}
-		this.Address = Address;
+		Message.Address = Address;
 		if (0 < PortNumber || PortNumber > 65535) {
-			this.PortNumber = Optional.of(PortNumber);
+			Message.PortNumber = PortNumber;
 		} else {
 			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
-			this.PortNumber = Optional.empty();
+			return Optional.empty();
 		}
 		if (PayLoad != null && PayLoad.length < PAYLOAD_MAX_SIZE) {
-			this.PayLoad = Optional.of(Arrays.copyOf(PayLoad, PayLoad.length));
+			Message.PayLoad = Optional.of(Arrays.copyOf(PayLoad, PayLoad.length));
 		} else if (PayLoad == null) {
 			LOGGER.log(Level.WARNING, "PayLoad is NULL.");
-			this.PayLoad = Optional.empty();
+			return Optional.empty();
 		} else {
 			LOGGER.log(Level.WARNING, "PayLoad is too long: " + PayLoad.length + " bytes, but should be less than "
 					+ PAYLOAD_MAX_SIZE + " bytes.");
-			this.PayLoad = Optional.empty();
+			return Optional.empty();
 		}
+
+		return Optional.of(Message);
 	}
 
 	public static Optional<UdpMessage> ConstructFromBytes(byte[] Raw) {
@@ -73,7 +79,7 @@ public class UdpMessage {
 			return Optional.empty();
 		}
 
-		Message.SequenceNumber = Optional.of(UnsignedByteToLong(Raw[1], Raw[2], Raw[3], Raw[4]));
+		Message.SequenceNumber = UnsignedByteToLong(Raw[1], Raw[2], Raw[3], Raw[4]);
 
 		try {
 			Message.Address = InetAddress.getByAddress(new byte[] { Raw[5], Raw[6], Raw[7], Raw[8] });
@@ -82,7 +88,7 @@ public class UdpMessage {
 			return Optional.empty();
 		}
 
-		Message.PortNumber = Optional.of(UnsignedByteToInt(Raw[9], Raw[10]));
+		Message.PortNumber = UnsignedByteToInt(Raw[9], Raw[10]);
 
 		if (Raw.length >= HEADER_SIZE) {
 			int EndIndex = -1;
@@ -104,41 +110,24 @@ public class UdpMessage {
 		return Optional.of(Message);
 	}
 
-	public Boolean IsValid() {
-		if (SequenceNumber.isEmpty()) {
-			return false;
-		}
-		if (PortNumber.isEmpty()) {
-			return false;
-		}
-//		if (PayLoad.isEmpty()) {
-//			return false;
-//		}
-		return true;
-	}
-
-	public Optional<byte[]> GenerateRaw() {
-		if (!IsValid()) {
-			return Optional.empty();
-		}
-
+	public byte[] GenerateRaw() {
 		final int PayLoadSize = PayLoad.isPresent() ? PayLoad.get().length : 0;
 
 		ByteBuffer Buffer = ByteBuffer.allocate(HEADER_SIZE + PayLoadSize);
 
 		Buffer.put((byte) PacketType.GetValue());
 
-		Buffer.put(ToBytes(SequenceNumber.get()));
+		Buffer.put(ToBytes(SequenceNumber));
 
 		Buffer.put(Address.getAddress());
 
-		Buffer.put(ToBytes(PortNumber.get()));
+		Buffer.put(ToBytes(PortNumber));
 
 		if (PayLoad.isPresent()) {
 			Buffer.put(PayLoad.get());
 		}
 
-		return Optional.of(Buffer.array());
+		return Buffer.array();
 	}
 
 	private static byte[] ToBytes(int IntValue) {
@@ -163,29 +152,41 @@ public class UdpMessage {
 
 	private static int UnsignedByteToInt(byte b0, byte b1) {
 		return ((b0 & 0xFF) << 8) + ((b1 & 0xFF) << 0);
+//		return (b0 << 8) + (b1 << 0);
+
 	}
 
 	private static long UnsignedByteToLong(byte b0, byte b1, byte b2, byte b3) {
 		return ((b0 & 0xFF) << 24) + ((b1 & 0xFF) << 16) + ((b2 & 0xFF) << 8) + ((b3 & 0xFF) << 0);
+//		return (b0 << 24) + (b1 << 16) + (b2 << 8) + (b3 << 0);
 	}
 
 	public void PrintAsUnsignedBytes() {
-		final Optional<byte[]> Raw = GenerateRaw();
-
-		if (Raw.isPresent()) {
-			int i = 0;
-			for (Byte b : Raw.get()) {
-				System.out.println(i++ + ": " + (short) (b & 0x00FF));
-			}
+		final byte[] Raw = GenerateRaw();
+		int i = 0;
+		for (Byte b : Raw) {
+			System.out.println(i++ + ": " + (short) (b & 0x00FF));
 		}
+	}
+
+	public Boolean IsSyn() {
+		return PacketType == EUdpPacketType.Syn;
+	}
+
+	public Boolean IsSynAck() {
+		return PacketType == EUdpPacketType.SynAck;
+	}
+
+	public InetSocketAddress GetSocketAddress() {
+		return new InetSocketAddress(Address, PortNumber);
 	}
 
 	public String toString() {
 		String Output = "";
 		Output += "PacketType: " + PacketType.GetValue() + "\n";
-		Output += "SequenceNumber: " + SequenceNumber.get() + "\n";
+		Output += "SequenceNumber: " + SequenceNumber + "\n";
 		Output += "Address: " + Address.toString() + "\n";
-		Output += "PortNumber: " + PortNumber.get() + "\n";
+		Output += "PortNumber: " + PortNumber + "\n";
 		if (PayLoad.isPresent()) {
 			Output += "PayLoad:\n" + new String(PayLoad.get()) + "\n";
 		} else {

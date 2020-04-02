@@ -5,18 +5,23 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.IntStream;
 
+import Common.Constants;
+import Common.DatagramChannelUtils;
 import Common.UdpMessage;
 
 public class HttpFS {
+
+	private final static Logger LOGGER = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 
 	private static final int SERVER_CLIENT_LIMIT = 10;
 
@@ -25,20 +30,26 @@ public class HttpFS {
 	public static void main(String[] args) {
 
 		try {
-			DatagramChannel InChannel = DatagramChannel.open();
-			InChannel.configureBlocking(false);
+			DatagramChannel Channel = DatagramChannel.open();
+			Channel.configureBlocking(false);
 			// Port 0 will select any available one.
-			InChannel.bind(new InetSocketAddress(SERVER_PORT));
+			Channel.bind(new InetSocketAddress(SERVER_PORT));
 			// SocketAddress Server = new InetSocketAddress("0.0.0.0", 3001);
 			while (true) {
-				ByteBuffer Buffer = ByteBuffer.allocate(UdpMessage.UDP_MESSAGE_MAX_SIZE);
-				InetSocketAddress SocketAddress = (InetSocketAddress) InChannel.receive(Buffer);
-				if (SocketAddress != null) {
-					int a = 5;
-					Buffer.clear();
-					Optional<UdpMessage> Msg = UdpMessage.ConstructFromBytes(Buffer.array());
-					if (Msg.isPresent()) {
-						System.out.print(Msg.get().toString());
+
+				LOGGER.log(Level.INFO, "Waiting for Syn on " + Constants.SERVER_ADDRESS.toString() + "...");
+
+				Optional<UdpMessage> SynMsg = DatagramChannelUtils.ReceiveBlocking(Channel);
+				if (SynMsg.isPresent()) {
+					if (SynMsg.get().IsSyn()) {
+
+						LOGGER.log(Level.INFO, "Syn received from " + SynMsg.get().GetSocketAddress()
+								+ ". Launching connection thread...");
+
+						ServerConnection ServerConnection = new ServerConnection(SynMsg.get().GetSocketAddress());
+						Thread ServerConnectionThread = new Thread(ServerConnection);
+						ServerConnectionThread.run();
+						// System.out.print(Msg.get().toString());
 
 						// Msg.get().PrintAsUnsignedBytes();
 					}
