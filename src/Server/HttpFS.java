@@ -1,7 +1,12 @@
 package Server;
+
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -9,11 +14,45 @@ import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
+import Common.UdpMessage;
+
 public class HttpFS {
 
 	private static final int SERVER_CLIENT_LIMIT = 10;
 
+	private static final int SERVER_PORT = 8007;
+
 	public static void main(String[] args) {
+
+		try {
+			DatagramChannel InChannel = DatagramChannel.open();
+			InChannel.configureBlocking(false);
+			// Port 0 will select any available one.
+			InChannel.bind(new InetSocketAddress(SERVER_PORT));
+			// SocketAddress Server = new InetSocketAddress("0.0.0.0", 3001);
+			while (true) {
+				ByteBuffer Buffer = ByteBuffer.allocate(UdpMessage.UDP_MESSAGE_MAX_SIZE);
+				InetSocketAddress SocketAddress = (InetSocketAddress) InChannel.receive(Buffer);
+				if (SocketAddress != null) {
+					int a = 5;
+					Buffer.clear();
+					Optional<UdpMessage> Msg = UdpMessage.ConstructFromBytes(Buffer.array());
+					if (Msg.isPresent()) {
+						System.out.print(Msg.get().toString());
+
+						// Msg.get().PrintAsUnsignedBytes();
+					}
+					// System.exit(0);
+				}
+			}
+		} catch (SocketException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
 		FSOption Option = new HttpFS.FSOption(args);
 		if (Option.Error.isPresent()) {
 			System.out.println(Option.Error.get());

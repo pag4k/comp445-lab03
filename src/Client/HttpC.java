@@ -2,7 +2,12 @@ package Client;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.util.Optional;
 
 import Common.EUdpPacketType;
@@ -13,10 +18,36 @@ import Common.UdpMessage;
 public class HttpC {
 	public static void main(String args[]) throws UnknownHostException {
 
-		UdpMessage Msg = new UdpMessage(EUdpPacketType.Data, (long) 1025,
-				InetAddress.getByAddress(new byte[] { 1, 2, 3, 4 }), (int) 10, new byte[] { 5, 6, 7 });
+		UdpMessage Msg = new UdpMessage(EUdpPacketType.Data, (long) 1,
+				InetAddress.getByAddress(new byte[] { (byte) 127, (byte) 0, (byte) 0, (byte) 1 }), (int) 8007,
+				new byte[] { (byte) 75, (byte) 105, (byte) 32, (byte) 83 });
 
-		Msg.GenerateRaw();
+		byte[] Raw = Msg.GenerateRaw().get();
+
+		System.out.print(Msg.toString());
+
+		// Msg.PrintAsUnsignedBytes();
+
+		InetAddress Address = InetAddress.getByAddress(new byte[] { (byte) 0, (byte) 0, (byte) 0, (byte) 0 });
+
+		try {
+			DatagramChannel OutChannel = DatagramChannel.open();
+			OutChannel.configureBlocking(false);
+			// Port 0 will select any available one.
+			OutChannel.bind(new InetSocketAddress(0));
+			System.out.println("Sending address: " + OutChannel.getLocalAddress());
+			SocketAddress Server = new InetSocketAddress("127.0.0.1", 3001);
+			ByteBuffer Buffer = ByteBuffer.allocate(Raw.length);
+			Buffer.put(Raw);
+			Buffer.clear();
+			OutChannel.send(Buffer, Server);
+		} catch (SocketException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 		// Print help.
 		if (args.length > 0 && args[0].equals("help")) {
