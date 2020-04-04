@@ -12,27 +12,31 @@ import java.util.logging.Logger;
 public class UdpMessage {
 	private final static Logger LOGGER = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 
+	public static int NUMBER_MAX = (int) Math.pow(2, 16) - 1;
+
 	private static int HEADER_SIZE = 11;
-	private static int PAYLOAD_MAX_SIZE = 1013;
+	public static int PAYLOAD_MAX_SIZE = 1013;
 	public static int UDP_MESSAGE_MAX_SIZE = HEADER_SIZE + PAYLOAD_MAX_SIZE;
 
 	private EUdpPacketType PacketType; // 1 byte
-	private Long SequenceNumber; // 4 bytes big-endian
+	private int SequenceNumber; // 2 bytes big-endian
+	private int AcknowledgmentNumber; // 2 bytes big-endian
 	private InetAddress Address; // 4 bytes IPv4
-	private Integer PortNumber; // 2 bytes big-endian
+	private int PortNumber; // 2 bytes big-endian
 	private Optional<byte[]> PayLoad;
 
 	private UdpMessage() {
 		PacketType = null;
-		SequenceNumber = (long) -1;
+		SequenceNumber = -1;
+		AcknowledgmentNumber = -1;
 		Address = null;
 		PortNumber = -1;
 		PayLoad = Optional.empty();
 
 	}
 
-	public static Optional<UdpMessage> New(EUdpPacketType PacketType, long SequenceNumber, InetAddress Address,
-			int PortNumber, byte[] PayLoad) {
+	public static Optional<UdpMessage> New(EUdpPacketType PacketType, int SequenceNumber, int AcknowledgmentNumber,
+			InetAddress Address, int PortNumber, byte[] PayLoad) {
 
 		UdpMessage Message = new UdpMessage();
 
@@ -41,6 +45,12 @@ public class UdpMessage {
 			Message.SequenceNumber = SequenceNumber;
 		} else {
 			LOGGER.log(Level.WARNING, "SequenceNumber should not be negative.");
+			return Optional.empty();
+		}
+		if (AcknowledgmentNumber >= 0) {
+			Message.AcknowledgmentNumber = AcknowledgmentNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "AcknowledgmentNumber should not be negative.");
 			return Optional.empty();
 		}
 		Message.Address = Address;
@@ -64,6 +74,71 @@ public class UdpMessage {
 		return Optional.of(Message);
 	}
 
+	public static Optional<UdpMessage> ConstructSynNew(InetAddress Address, int PortNumber) {
+		UdpMessage Message = new UdpMessage();
+		Message.PacketType = EUdpPacketType.Syn;
+		Message.SequenceNumber = (int) (Math.random() * (NUMBER_MAX - 1) + 1);
+		Message.AcknowledgmentNumber = 0;
+		Message.Address = Address;
+		if (0 < PortNumber || PortNumber > 65535) {
+			Message.PortNumber = PortNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
+			return Optional.empty();
+		}
+		Message.PayLoad = Optional.empty();
+		return Optional.of(Message);
+	}
+
+	public static Optional<UdpMessage> ConstructSynAckNew(int AcknowledgmentNumber, InetAddress Address,
+			int PortNumber) {
+		UdpMessage Message = new UdpMessage();
+		Message.PacketType = EUdpPacketType.SynAck;
+		Message.SequenceNumber = (int) (Math.random() * (NUMBER_MAX - 1) + 1);
+		if (AcknowledgmentNumber >= 0) {
+			Message.AcknowledgmentNumber = AcknowledgmentNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "AcknowledgmentNumber should not be negative.");
+			return Optional.empty();
+		}
+		Message.Address = Address;
+		if (0 < PortNumber || PortNumber > 65535) {
+			Message.PortNumber = PortNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
+			return Optional.empty();
+		}
+		Message.PayLoad = Optional.empty();
+		return Optional.of(Message);
+	}
+
+	public static Optional<UdpMessage> ConstructAckNew(int SequenceNumber, int AcknowledgmentNumber,
+			InetAddress Address, int PortNumber) {
+		UdpMessage Message = new UdpMessage();
+		Message.PacketType = EUdpPacketType.Ack;
+		if (SequenceNumber >= 0) {
+			Message.SequenceNumber = SequenceNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "SequenceNumber should not be negative.");
+			return Optional.empty();
+		}
+		if (AcknowledgmentNumber >= 0) {
+			Message.AcknowledgmentNumber = AcknowledgmentNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "AcknowledgmentNumber should not be negative.");
+			return Optional.empty();
+		}
+		Message.Address = Address;
+		if (0 < PortNumber || PortNumber > 65535) {
+			Message.PortNumber = PortNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
+			return Optional.empty();
+		}
+		Message.PayLoad = Optional.empty();
+		return Optional.of(Message);
+	}
+
 	public static Optional<UdpMessage> ConstructFromBytes(byte[] Raw) {
 		if (Raw.length < HEADER_SIZE) {
 			LOGGER.log(Level.WARNING, "Byte array is too short. It does not contain all the header.");
@@ -79,7 +154,9 @@ public class UdpMessage {
 			return Optional.empty();
 		}
 
-		Message.SequenceNumber = UnsignedByteToLong(Raw[1], Raw[2], Raw[3], Raw[4]);
+		Message.SequenceNumber = UnsignedByteToInt(Raw[1], Raw[2]);
+
+		Message.AcknowledgmentNumber = UnsignedByteToInt(Raw[3], Raw[4]);
 
 		try {
 			Message.Address = InetAddress.getByAddress(new byte[] { Raw[5], Raw[6], Raw[7], Raw[8] });
@@ -118,6 +195,8 @@ public class UdpMessage {
 		Buffer.put((byte) PacketType.GetValue());
 
 		Buffer.put(ToBytes(SequenceNumber));
+
+		Buffer.put(ToBytes(AcknowledgmentNumber));
 
 		Buffer.put(Address.getAddress());
 
@@ -177,20 +256,33 @@ public class UdpMessage {
 		return PacketType == EUdpPacketType.SynAck;
 	}
 
+	public Boolean IsAck() {
+		return PacketType == EUdpPacketType.Ack;
+	}
+
+	public int GetSequenceNumber() {
+		return SequenceNumber;
+	}
+
+	public int GetAcknowledgmentNumber() {
+		return AcknowledgmentNumber;
+	}
+
 	public InetSocketAddress GetSocketAddress() {
 		return new InetSocketAddress(Address, PortNumber);
 	}
 
 	public String toString() {
 		String Output = "";
-		Output += "PacketType: " + PacketType.GetValue() + "\n";
-		Output += "SequenceNumber: " + SequenceNumber + "\n";
-		Output += "Address: " + Address.toString() + "\n";
-		Output += "PortNumber: " + PortNumber + "\n";
+		Output += "Type: " + PacketType + " ";
+		Output += "SEQ: " + SequenceNumber + " ";
+		Output += "ACK: " + AcknowledgmentNumber + " ";
+		Output += "Addr: " + Address.toString() + " ";
+		Output += "Port: " + PortNumber + " ";
 		if (PayLoad.isPresent()) {
-			Output += "PayLoad:\n" + new String(PayLoad.get()) + "\n";
+			Output += "PayLoad: " + new String(PayLoad.get());
 		} else {
-			Output += "No PayLoad\n";
+			Output += "No PayLoad";
 		}
 		return Output;
 	}

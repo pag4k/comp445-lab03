@@ -28,6 +28,25 @@ public class DatagramChannelUtils {
 		return true;
 	}
 
+	public static Optional<UdpMessage> ReceiveOnce(DatagramChannel Channel) {
+		ByteBuffer Buffer = ByteBuffer.allocate(UdpMessage.UDP_MESSAGE_MAX_SIZE);
+		try {
+			SocketAddress SocketAddress = Channel.receive(Buffer);
+			if (SocketAddress != null) {
+				Buffer.clear();
+				Optional<UdpMessage> Message = UdpMessage.ConstructFromBytes(Buffer.array());
+				if (Message.isPresent()) {
+					return Message;
+				} else {
+					LOGGER.log(Level.WARNING, "Malformed message: " + Buffer.toString() + ".");
+				}
+			}
+		} catch (IOException e) {
+			return Optional.empty();
+		}
+		return Optional.empty();
+	}
+
 	public static Optional<UdpMessage> Receive(DatagramChannel Channel, int Timeout) {
 
 		final long StartTime = System.currentTimeMillis();
@@ -62,7 +81,6 @@ public class DatagramChannelUtils {
 			try {
 				SocketAddress SocketAddress = Channel.receive(Buffer);
 				if (SocketAddress != null) {
-					Buffer.clear();
 					Buffer.clear();
 					Optional<UdpMessage> Message = UdpMessage.ConstructFromBytes(Buffer.array());
 					if (Message.isPresent()) {

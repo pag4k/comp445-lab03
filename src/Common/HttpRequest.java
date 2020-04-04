@@ -13,6 +13,7 @@ import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Optional;
 
@@ -243,7 +244,20 @@ public class HttpRequest {
 		return true;
 	}
 
-	public ArrayList<String> GenerateRaw() {
+	public byte[] GetAsBytes() {
+		// FIXME: This is very inefficient.
+		ArrayList<Byte> Bytes = new ArrayList<Byte>();
+
+		for (String Line : GenAsLines()) {
+			Bytes.addAll(Arrays.asList(ByteUtils.ToObjects(Line.getBytes())));
+			Bytes.add((byte) '\r');
+			Bytes.add((byte) '\n');
+		}
+
+		return ByteUtils.ToPrimitives((Byte[]) Bytes.toArray());
+	}
+
+	public ArrayList<String> GenAsLines() {
 		ArrayList<String> Output = new ArrayList<String>();
 
 		// Remove Content-Length header.
@@ -309,7 +323,7 @@ public class HttpRequest {
 		PrintWriter PrintWriter = new PrintWriter(OutputStream, true);
 		BufferedReader BufferedReader = new BufferedReader(new InputStreamReader(Socket.getInputStream()));
 
-		final ArrayList<String> Request = GenerateRaw();
+		final ArrayList<String> Request = GenAsLines();
 
 		System.out.println("###### REQUEST #####");
 		for (String Line : Request) {

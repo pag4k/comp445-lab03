@@ -10,7 +10,6 @@ import java.util.logging.Logger;
 
 import Common.Constants;
 import Common.DatagramChannelUtils;
-import Common.EUdpPacketType;
 import Common.UdpMessage;
 
 public class ServerConnection implements Runnable {
@@ -20,8 +19,12 @@ public class ServerConnection implements Runnable {
 	private InetSocketAddress LocalSocketAddress;
 	private InetSocketAddress RemoteSocketAddress;
 
-	public ServerConnection(InetSocketAddress SocketAddress) {
-		this.RemoteSocketAddress = SocketAddress;
+	private int LocalSequenceNumber;
+	private int RemoteSequenceNumber;
+
+	public ServerConnection(UdpMessage UdpMessage) {
+		this.RemoteSocketAddress = UdpMessage.GetSocketAddress();
+		this.RemoteSequenceNumber = UdpMessage.GetSequenceNumber() + 1;
 	}
 
 	@Override
@@ -35,27 +38,46 @@ public class ServerConnection implements Runnable {
 			LocalSocketAddress = (InetSocketAddress) Channel.getLocalAddress();
 			// System.out.println("Sending address: " + OutChannel.getLocalAddress());
 
-			Optional<UdpMessage> SynAckMsg = UdpMessage.New(EUdpPacketType.SynAck, (long) 1,
-					RemoteSocketAddress.getAddress(), RemoteSocketAddress.getPort(), new byte[] {});
+			Optional<UdpMessage> SynAckMsg = UdpMessage.ConstructSynAckNew(RemoteSequenceNumber,
+					RemoteSocketAddress.getAddress(), RemoteSocketAddress.getPort());
 
 			if (SynAckMsg.isEmpty()) {
 				return;
 			}
 
-			LOGGER.log(Level.INFO, "Sending SYNACK to " + SynAckMsg.get().GetSocketAddress().toString() + ".");
+			LocalSequenceNumber = SynAckMsg.get().GetSequenceNumber();
 
-			DatagramChannelUtils.Send(Channel, Constants.ROUTER_ADDRESS, SynAckMsg.get());
+			Optional<UdpMessage> AckMsg = Optional.empty();
+			for (int i = 0; i < Constants.RETRANSMISSION_ATTEMPTS; i++) {
+				LOGGER.log(Level.INFO, "Sending: " + SynAckMsg.get() + ".");
 
-			LOGGER.log(Level.INFO, "Waiting for ACK on " + LocalSocketAddress.toString() + "...");
+				DatagramChannelUtils.Send(Channel, Constants.ROUTER_ADDRESS, SynAckMsg.get());
 
-			Optional<UdpMessage> AckMsg = DatagramChannelUtils.ReceiveBlocking(Channel);
+				LOGGER.log(Level.INFO, "Waiting for ACK on " + LocalSocketAddress.toString() + "...");
+
+				AckMsg = DatagramChannelUtils.Receive(Channel, Constants.DEFAULT_TIMEOUT);
+
+				if (AckMsg.isPresent()) {
+					break;
+				}
+			}
 
 			if (AckMsg.isEmpty()) {
+				LOGGER.log(Level.WARNING, "Connection attemp timeout: SYNACK never received.");
 				return;
 			}
 
-			LOGGER.log(Level.INFO,
-					"ACK received from " + AckMsg.get().GetSocketAddress().toString() + ". Waiting for RDT.");
+			// Here, we could have the ACK or Data.
+			if (AckMsg.get().GetSequenceNumber() == RemoteSequenceNumber) {
+				// It was the ACK, just start RDT.
+				LOGGER.log(Level.INFO, "Received: " + AckMsg.get() + ". Waiting for RDT.");
+			} else {
+				// It was Data, so we can assume the ACK was sent.
+				LOGGER.log(Level.INFO,
+						"Received data. Assume ACK was sent. : " + AckMsg.get() + ". Sending packet to RDT.");
+				RemoteSequenceNumber++;
+				// Then send the packet to RDT.
+			}
 
 		} catch (SocketException e1) {
 			// TODO Auto-generated catch block

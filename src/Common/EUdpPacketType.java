@@ -22,4 +22,20 @@ public enum EUdpPacketType {
 	int GetValue() {
 		return Value;
 	}
+
+	public String toString() {
+		switch (Value) {
+		case 1:
+			return "Data";
+		case 2:
+			return "ACK";
+		case 3:
+			return "SYN";
+		case 4:
+			return "SYNACK";
+		case 5:
+			return "NAK";
+		}
+		return "ERROR";
+	}
 }

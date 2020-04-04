@@ -10,7 +10,6 @@ import java.util.logging.Logger;
 
 import Common.Constants;
 import Common.DatagramChannelUtils;
-import Common.EUdpPacketType;
 import Common.UdpMessage;
 
 public class ClientConnection implements Runnable {
@@ -19,6 +18,9 @@ public class ClientConnection implements Runnable {
 
 	private InetSocketAddress LocalSocketAddress;
 	private InetSocketAddress RemoteSocketAddress;
+
+	private int LocalSequenceNumber;
+	private int RemoteSequenceNumber;
 
 	public ClientConnection(InetSocketAddress SocketAddress) {
 		this.RemoteSocketAddress = SocketAddress;
@@ -30,12 +32,16 @@ public class ClientConnection implements Runnable {
 //		InetAddress.getByAddress(new byte[] { (byte) 127, (byte) 0, (byte) 0, (byte) 1 }), (int) 8007,
 //		new byte[] { (byte) 75, (byte) 105, (byte) 32, (byte) 83 });
 
-		Optional<UdpMessage> SynMsg = UdpMessage.New(EUdpPacketType.Syn, (long) 1, RemoteSocketAddress.getAddress(),
-				RemoteSocketAddress.getPort(), new byte[] {});
+		Optional<UdpMessage> SynMsg = UdpMessage.ConstructSynNew(RemoteSocketAddress.getAddress(),
+				RemoteSocketAddress.getPort());
 
 		if (SynMsg.isEmpty()) {
 			return;
 		}
+
+		// SynMsg.get().PrintAsUnsignedBytes();
+
+		LocalSequenceNumber = SynMsg.get().GetSequenceNumber();
 
 		try (DatagramChannel Channel = DatagramChannel.open();) {
 			// Channel configuration.
@@ -46,13 +52,13 @@ public class ClientConnection implements Runnable {
 
 			Optional<UdpMessage> SynAckMsg = Optional.empty();
 			for (int i = 0; i < Constants.RETRANSMISSION_ATTEMPTS; i++) {
-				LOGGER.log(Level.INFO, "Sending SYN to " + SynMsg.get().GetSocketAddress().toString() + ".");
+				LOGGER.log(Level.INFO, "Sending: " + SynMsg.get() + ".");
 
 				DatagramChannelUtils.Send(Channel, Constants.ROUTER_ADDRESS, SynMsg.get());
 
 				LOGGER.log(Level.INFO, "Waiting for SYNACK on " + LocalSocketAddress.toString() + "...");
 
-				SynAckMsg = DatagramChannelUtils.ReceiveBlocking(Channel);
+				SynAckMsg = DatagramChannelUtils.Receive(Channel, Constants.DEFAULT_TIMEOUT);
 
 				if (SynAckMsg.isPresent()) {
 					break;
@@ -67,20 +73,24 @@ public class ClientConnection implements Runnable {
 			// Update address to avoid main server port.
 			RemoteSocketAddress = SynAckMsg.get().GetSocketAddress();
 
-			LOGGER.log(Level.INFO, "SYNACK received from " + SynAckMsg.get().GetSocketAddress().toString() + ".");
+			LocalSequenceNumber++;
 
-			Optional<UdpMessage> AckMsg = UdpMessage.New(EUdpPacketType.Ack, (long) 1, RemoteSocketAddress.getAddress(),
-					RemoteSocketAddress.getPort(), new byte[] {});
+			RemoteSequenceNumber = SynAckMsg.get().GetSequenceNumber() + 1;
+
+			LOGGER.log(Level.INFO, "Received: " + SynAckMsg.get() + ".");
+
+			Optional<UdpMessage> AckMsg = UdpMessage.ConstructAckNew(LocalSequenceNumber, RemoteSequenceNumber,
+					RemoteSocketAddress.getAddress(), RemoteSocketAddress.getPort());
 
 			if (SynMsg.isEmpty()) {
 				return;
 			}
 
-			LOGGER.log(Level.INFO, "Sending Ack to " + AckMsg.get().GetSocketAddress().toString() + ".");
+			LOGGER.log(Level.INFO, "Sending: " + AckMsg.get() + ".");
 
 			DatagramChannelUtils.Send(Channel, Constants.ROUTER_ADDRESS, AckMsg.get());
 
-			LOGGER.log(Level.INFO, "Sending data  to " + RemoteSocketAddress.toString() + ".");
+			LOGGER.log(Level.INFO, "Sending data to " + RemoteSocketAddress.toString() + ".");
 
 		} catch (SocketException e1) {
 			// TODO Auto-generated catch block

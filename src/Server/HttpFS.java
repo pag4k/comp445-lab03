@@ -34,19 +34,17 @@ public class HttpFS {
 			Channel.configureBlocking(false);
 			// Port 0 will select any available one.
 			Channel.bind(new InetSocketAddress(SERVER_PORT));
-			// SocketAddress Server = new InetSocketAddress("0.0.0.0", 3001);
 			while (true) {
 
-				LOGGER.log(Level.INFO, "Waiting for Syn on " + Constants.SERVER_ADDRESS.toString() + "...");
+				LOGGER.log(Level.INFO, "Waiting for SYN on " + Constants.SERVER_ADDRESS.toString() + "...");
 
 				Optional<UdpMessage> SynMsg = DatagramChannelUtils.ReceiveBlocking(Channel);
 				if (SynMsg.isPresent()) {
 					if (SynMsg.get().IsSyn()) {
 
-						LOGGER.log(Level.INFO, "Syn received from " + SynMsg.get().GetSocketAddress()
-								+ ". Launching connection thread...");
+						LOGGER.log(Level.INFO, "Received: " + SynMsg.get() + ". Launching connection thread...");
 
-						ServerConnection ServerConnection = new ServerConnection(SynMsg.get().GetSocketAddress());
+						ServerConnection ServerConnection = new ServerConnection(SynMsg.get());
 						Thread ServerConnectionThread = new Thread(ServerConnection);
 						ServerConnectionThread.run();
 						// System.out.print(Msg.get().toString());
