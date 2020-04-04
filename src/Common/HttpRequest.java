@@ -17,22 +17,17 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Optional;
 
-public class HttpRequest {
+public class HttpRequest extends HttpMessage {
 	private static final int HTTP_PORT = 8080;
 	private static final String DEFAULT_USER_AGENT_HEADER = "User-Agent: Concordia-HTTP/1.0";
-	private static final String CONTENT_LENGTH_HEADER = "content-length";
 
-	private Optional<String> Error;
 	private Optional<EHttpOperation> HttpOperation;
 	private boolean bVerbose;
-	private HashMap<String, String> HeaderMap;
-	private Optional<String> Body;
 	private Optional<String> BodyFromFile;
 	private Optional<URL> Url;
 	private Optional<String> Path;
 	private Optional<String> InputFileName;
 	private Optional<String> OutputFileName;
-	private Optional<String> Version;
 
 	public HttpRequest(String Arguments[]) {
 		// Set default values.
@@ -127,7 +122,7 @@ public class HttpRequest {
 		Url = Optional.empty();
 		Path = Optional.empty();
 		OutputFileName = Optional.empty();
-		Version = Optional.empty();
+		HttpVersion = Optional.empty();
 
 		String RequestLine = BufferedReader.readLine();
 
@@ -144,7 +139,7 @@ public class HttpRequest {
 				return;
 			}
 			Path = Optional.of(Arguments[1]);
-			Version = Optional.of(Arguments[2]);
+			HttpVersion = Optional.of(Arguments[2]);
 		} else {
 			Error = Optional.of("ERROR: No RequestLine.");
 			return;
@@ -194,6 +189,20 @@ public class HttpRequest {
 			}
 
 		}
+	}
+
+	public static Boolean IsFirstLine(String FirstLine) {
+		// FIXME: I could do better check for example with version and path.
+		final String[] Arguments = FirstLine.split(" ", 3);
+		if (Arguments.length != 3) {
+			return false;
+		}
+		try {
+			EHttpOperation.valueOf(Arguments[0].toLowerCase());
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+		return true;
 	}
 
 	public void Redirect(String Location) {
@@ -397,7 +406,7 @@ public class HttpRequest {
 
 		StringBuilder ResponseBuilder = new StringBuilder();
 		if (bVerbose) {
-			ResponseBuilder.append(HttpOperation.get() + " " + Path.get() + " " + Version.get() + "\n");
+			ResponseBuilder.append(HttpOperation.get() + " " + Path.get() + " " + HttpVersion.get() + "\n");
 			for (String Key : HeaderMap.keySet()) {
 				ResponseBuilder.append(Key + ": " + HeaderMap.get(Key) + "\n");
 			}

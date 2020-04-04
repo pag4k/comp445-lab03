@@ -1,4 +1,5 @@
 package Common;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -7,18 +8,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class HttpResponse {
+public class HttpResponse extends HttpMessage {
 	private static final int[] REDIRECTED_CODES = { 300, 301, 302 };
 
 	private static final Map<Integer, String> Phrases = Map.of(200, "OK", 201, "Created", 400, "Bad Request", 403,
 			"Forbidden", 404, "Not found");
 
-	private Optional<String> Error;
-	private Optional<String> HttpVersion;
 	private Optional<Integer> StatusCode;
 	private Optional<String> Phrase;
-	private HashMap<String, String> HeaderMap;
-	private Optional<String> Body;
 
 	public HttpResponse(String[] Lines) {
 		Error = Optional.empty();
@@ -88,6 +85,29 @@ public class HttpResponse {
 			}
 			Body = Optional.of(BodyBuilder.toString());
 		}
+
+		int ContentLength = -1;
+		if (HeaderMap.containsKey("Content-Length")) {
+			try {
+				ContentLength = Integer.parseInt(HeaderMap.get("Content-Length"));
+			} catch (NumberFormatException e) {
+				Error = Optional.of("ERROR: Invalid Content-Length: " + HeaderMap.get("Content-Length"));
+				return;
+			}
+		}
+
+		if (Body.isPresent()) {
+			if (ContentLength != Body.get().length()) {
+				Error = Optional.of(
+						"ERROR: Content-Length is " + ContentLength + ", but body length is  " + Body.get().length());
+				return;
+			}
+		} else {
+			if (ContentLength != 0) {
+				Error = Optional.of("ERROR: Content-Length should be 0, but is: " + ContentLength);
+				return;
+			}
+		}
 	}
 
 	public HttpResponse(String Text) {
@@ -126,6 +146,20 @@ public class HttpResponse {
 		HeaderMap.put("Content-Length", Integer.toString(Body.length()));
 	}
 
+	public static Boolean IsFirstLine(String FirstLine) {
+		// FIXME: I could do better check for example with version.
+		final String[] Arguments = FirstLine.split(" ", 3);
+		if (Arguments.length != 3) {
+			return false;
+		}
+		try {
+			int Code = Integer.parseUnsignedInt(Arguments[1]);
+			return Phrases.containsKey(Code);
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
 	public boolean IsValid() {
 		if (Error.isPresent()) {
 			return false;
@@ -136,6 +170,16 @@ public class HttpResponse {
 		}
 
 		return true;
+	}
+
+	public byte[] GetAsBytes() {
+		// FIXME: This is very inefficient.
+		ArrayList<Byte> Bytes = new ArrayList<Byte>();
+
+		// FIXME: Assume it is a valid Response.
+		Bytes.addAll(Arrays.asList(ByteUtils.ToObjects(toString(true).get().getBytes())));
+
+		return ByteUtils.ToPrimitives((Byte[]) Bytes.toArray());
 	}
 
 	public Optional<String> toString(boolean bVerbose) {

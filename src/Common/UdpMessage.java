@@ -248,6 +248,14 @@ public class UdpMessage {
 		}
 	}
 
+	public InetAddress GetAddress() {
+		return Address;
+	}
+
+	public int GetPortNumber() {
+		return PortNumber;
+	}
+
 	public Boolean IsSyn() {
 		return PacketType == EUdpPacketType.Syn;
 	}
@@ -260,12 +268,20 @@ public class UdpMessage {
 		return PacketType == EUdpPacketType.Ack;
 	}
 
+	public Boolean IsData() {
+		return PacketType == EUdpPacketType.Data;
+	}
+
 	public int GetSequenceNumber() {
 		return SequenceNumber;
 	}
 
 	public int GetAcknowledgmentNumber() {
 		return AcknowledgmentNumber;
+	}
+
+	public Optional<byte[]> GetPayload() {
+		return PayLoad;
 	}
 
 	public InetSocketAddress GetSocketAddress() {
