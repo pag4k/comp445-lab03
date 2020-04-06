@@ -153,11 +153,11 @@ public class HttpRequest extends HttpMessage {
 				final String Value = Pair[1].trim();
 				if (HeaderMap.containsKey(Key)) {
 					// FIXME: For now, just overwrite it, but it should not do that.
-					HeaderMap.put(Key.toLowerCase(), Value);
+					HeaderMap.put(Key, Value);
 					// Error = Optional.of("ERROR: Header key " + Key + " is duplicated.");
 					// return;
 				} else {
-					HeaderMap.put(Key.toLowerCase(), Value);
+					HeaderMap.put(Key, Value);
 				}
 			} else {
 				Error = Optional.of("ERROR: Invalid key:value pair: " + HeaderLine);
@@ -166,28 +166,37 @@ public class HttpRequest extends HttpMessage {
 		}
 
 		if (HeaderMap.containsKey(CONTENT_LENGTH_HEADER)) {
-
-			int BodyLength = -1;
+			int ContentLength = -1;
 			try {
-				BodyLength = Integer.parseInt(HeaderMap.get(CONTENT_LENGTH_HEADER));
+				ContentLength = Integer.parseInt(HeaderMap.get(CONTENT_LENGTH_HEADER));
 			} catch (NumberFormatException e) {
 				Error = Optional.of("ERROR: Invalid Content-Length: " + HeaderMap.get(CONTENT_LENGTH_HEADER));
 				return;
 			}
 
-			if (BodyLength >= 0) {
-				if (BodyLength > 0) {
-					char BodyArray[] = new char[BodyLength];
-					BufferedReader.read(BodyArray, 0, BodyLength);
-					Body = Optional.of(new String(BodyArray));
+			if (ContentLength >= 0) {
+				if (ContentLength > 0) {
+					char BodyArray[] = new char[ContentLength];
+					final int BodyLength = BufferedReader.read(BodyArray, 0, ContentLength);
+					if (BodyLength == ContentLength) {
+						Body = Optional.of(new String(BodyArray));
+					} else {
+						Error = Optional.of(
+								"ERROR: Content-Length is " + ContentLength + ", but the Body Length is " + BodyLength);
+						return;
+					}
 				}
-
 			} else {
 				Error = Optional.of("ERROR: Content-Length must be greater than or equal to zero: "
 						+ HeaderMap.get(CONTENT_LENGTH_HEADER));
 				return;
 			}
-
+		} else {
+			// FIXME: Find a way to verify this.
+//			if (BufferedReader.read() != -1 && BufferedReader.read() != -1) {
+//				Error = Optional.of("ERROR: There is no Content-Length, but there is a Body.");
+//				return;
+//			}
 		}
 	}
 
@@ -246,7 +255,7 @@ public class HttpRequest extends HttpMessage {
 			return false;
 		}
 
-		if (Url.isEmpty()) {
+		if (Url.isEmpty() && Path.isEmpty()) {
 			return false;
 		}
 
@@ -257,21 +266,27 @@ public class HttpRequest extends HttpMessage {
 		// FIXME: This is very inefficient.
 		ArrayList<Byte> Bytes = new ArrayList<Byte>();
 
+		Boolean bAfterHeader = false;
 		for (String Line : GenAsLines()) {
 			Bytes.addAll(Arrays.asList(ByteUtils.ToObjects(Line.getBytes())));
-			Bytes.add((byte) '\r');
-			Bytes.add((byte) '\n');
+			if (!bAfterHeader) {
+				Bytes.add((byte) '\r');
+				Bytes.add((byte) '\n');
+			}
+			if (Line.equals("")) {
+				bAfterHeader = true;
+			}
 		}
 
-		return ByteUtils.ToPrimitives((Byte[]) Bytes.toArray());
+		return ByteUtils.ToPrimitives(Bytes.toArray());
 	}
 
 	public ArrayList<String> GenAsLines() {
 		ArrayList<String> Output = new ArrayList<String>();
 
 		// Remove Content-Length header.
-		if (HeaderMap.containsKey("Content-Length")) {
-			HeaderMap.remove("Content-Length");
+		if (HeaderMap.containsKey(CONTENT_LENGTH_HEADER)) {
+			HeaderMap.remove(CONTENT_LENGTH_HEADER);
 		}
 
 		switch (HttpOperation.get()) {
@@ -284,6 +299,7 @@ public class HttpRequest extends HttpMessage {
 			if (!HeaderMap.containsKey("User-Agent")) {
 				Output.add(DEFAULT_USER_AGENT_HEADER);
 			}
+			Output.add("");
 			break;
 		case post:
 			// Get the body.
@@ -299,7 +315,7 @@ public class HttpRequest extends HttpMessage {
 			Output.add("POST " + (Url.get().getFile().isEmpty() ? "/" : Url.get().getFile()) + " HTTP/1.0");
 			Output.add("Host: " + Url.get().getHost());
 			if (RawBody != null) {
-				Output.add("Content-Length: " + RawBody.getBytes().length);
+				Output.add(CONTENT_LENGTH_HEADER + ": " + RawBody.getBytes().length);
 			}
 			for (final String Key : HeaderMap.keySet()) {
 				Output.add(Key + ": " + HeaderMap.get(Key));

@@ -2,8 +2,6 @@ package Server;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.SocketException;
 import java.nio.channels.DatagramChannel;
 import java.nio.file.Files;
@@ -25,42 +23,7 @@ public class HttpFS {
 
 	private static final int SERVER_CLIENT_LIMIT = 10;
 
-	private static final int SERVER_PORT = 8007;
-
 	public static void main(String[] args) {
-
-		try {
-			DatagramChannel Channel = DatagramChannel.open();
-			Channel.configureBlocking(false);
-			// Port 0 will select any available one.
-			Channel.bind(new InetSocketAddress(SERVER_PORT));
-			while (true) {
-
-				LOGGER.log(Level.INFO, "Waiting for SYN on " + Constants.SERVER_ADDRESS.toString() + "...");
-
-				Optional<UdpMessage> SynMsg = DatagramChannelUtils.ReceiveBlocking(Channel);
-				if (SynMsg.isPresent()) {
-					if (SynMsg.get().IsSyn()) {
-
-						LOGGER.log(Level.INFO, "Received: " + SynMsg.get() + ". Launching connection thread...");
-
-						ServerConnection ServerConnection = new ServerConnection(SynMsg.get());
-						Thread ServerConnectionThread = new Thread(ServerConnection);
-						ServerConnectionThread.run();
-						// System.out.print(Msg.get().toString());
-
-						// Msg.get().PrintAsUnsignedBytes();
-					}
-					// System.exit(0);
-				}
-			}
-		} catch (SocketException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 
 		FSOption Option = new HttpFS.FSOption(args);
 		if (Option.Error.isPresent()) {
@@ -77,62 +40,80 @@ public class HttpFS {
 			return;
 		}
 
-		Socket ClientSockets[] = new Socket[SERVER_CLIENT_LIMIT];
+		ServerConnection ServerConnections[] = new ServerConnection[SERVER_CLIENT_LIMIT];
 		Thread Threads[] = new Thread[SERVER_CLIENT_LIMIT];
 
-		try (ServerSocket ServerSocket = new ServerSocket(Option.Port, SERVER_CLIENT_LIMIT)) {
+		try (DatagramChannel Channel = DatagramChannel.open();) {
+			Channel.configureBlocking(false);
+			// FIXME: Use port from option.
+			Channel.bind(new InetSocketAddress(Constants.SERVER_ADDRESS.getPort()));
 			if (Option.bVerbose) {
-				System.out.println("Server started on port : " + Option.Port + ".");
-				System.out.println("Up to " + SERVER_CLIENT_LIMIT + " clients handled simultaneously.");
+				LOGGER.log(Level.INFO, "Server started on port : " + Constants.SERVER_ADDRESS.getPort() + ".");
+				LOGGER.log(Level.INFO, "Up to " + SERVER_CLIENT_LIMIT + " clients handled simultaneously.");
 			}
 
-			// FIXME: Add way to quit?
+			LOGGER.log(Level.INFO, "Waiting for SYN on " + Constants.SERVER_ADDRESS.toString() + "...");
 			while (true) {
 				// Get next connection.
-				Socket ClientSocket = ServerSocket.accept();
+				Optional<UdpMessage> SynMsg = DatagramChannelUtils.ReceiveOnce(Channel);
 
 				// Check if any Thread is dead and clean up.
 				for (int i = 0; i < SERVER_CLIENT_LIMIT; ++i) {
 					if (Threads[i] != null && !Threads[i].isAlive()) {
-						ClientSockets[i].close();
-						ClientSockets[i] = null;
+						ServerConnections[i] = null;
 						Threads[i] = null;
 						if (Option.bVerbose) {
-							System.out.println("Connecton closed with client #" + i + ".");
+							LOGGER.log(Level.INFO, "Connecton closed with client #" + i + ".");
 						}
 					}
 				}
 
-				// Check if there is a free thread.
-				final int FreeThreadIndex = IntStream.range(0, SERVER_CLIENT_LIMIT).filter(i -> Threads[i] == null)
-						.findFirst().orElse(-1);
-				// If so, accept connection and send to SocketHandler.
-				if (FreeThreadIndex >= 0) {
-					HttpProtocol Server = new HttpProtocol(ClientSocket, Option.Path, Option.bVerbose);
-					if (Option.bVerbose) {
-						System.out.println("Connecton opened with client #" + FreeThreadIndex + ": "
-								+ ClientSocket.toString() + ".");
+				if (SynMsg.isPresent()) {
+					// Check if repeated SYN.
+					Boolean bDrop = false;
+					for (int i = 0; i < SERVER_CLIENT_LIMIT; ++i) {
+						if (Threads[i] != null) {
+							LOGGER.log(Level.INFO,
+									"Duplicate SYN detected: " + SynMsg.get().toString() + ". Dropping...");
+							if (ServerConnections[i].IsSameAddree(SynMsg.get().GetSocketAddress())) {
+								bDrop = true;
+								break;
+							}
+						}
 					}
-					ClientSockets[FreeThreadIndex] = ClientSocket;
-					Threads[FreeThreadIndex] = new Thread(Server);
-					Threads[FreeThreadIndex].start();
-				} else {
-					// Otherwise, refuse connection.
-					ClientSocket.close();
-					if (Option.bVerbose) {
-						System.out.println("Connecton refused with " + ClientSocket.toString() + ".");
+					// Drop duplicate.
+					if (bDrop) {
+						continue;
+					}
+					// Check if there is a free thread.
+					final int FreeThreadIndex = IntStream.range(0, SERVER_CLIENT_LIMIT).filter(i -> Threads[i] == null)
+							.findFirst().orElse(-1);
+					// If so, accept connection and send to SocketHandler.
+					if (FreeThreadIndex >= 0) {
+						if (SynMsg.get().IsSyn()) {
+							LOGGER.log(Level.INFO, "Received: " + SynMsg.get()
+									+ ". Launching connection thread for client " + FreeThreadIndex + "...");
+
+							ServerConnection ServerConnection = new ServerConnection(SynMsg.get(), Option.Path);
+							ServerConnections[FreeThreadIndex] = ServerConnection;
+							Threads[FreeThreadIndex] = new Thread(ServerConnection);
+							Threads[FreeThreadIndex].start();
+						}
+					} else {
+						// Otherwise, refuse connection.
+						if (Option.bVerbose) {
+							LOGGER.log(Level.INFO, "Connecton refused from: " + SynMsg.toString());
+						}
 					}
 				}
 			}
+		} catch (SocketException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		} catch (IOException e) {
-			System.out.println("ERROR: Could not create ServerSocket: " + e.getMessage());
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
-//		try {
-//			Threads[0].join();
-//		} catch (InterruptedException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
 	}
 
 	public static void PrintHelp() {

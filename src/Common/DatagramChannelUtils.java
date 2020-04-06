@@ -13,9 +13,7 @@ public class DatagramChannelUtils {
 	private final static Logger LOGGER = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 
 	public static Boolean Send(DatagramChannel Channel, SocketAddress TargetSocket, UdpMessage Message) {
-
 		final byte[] RawMessage = Message.GenerateRaw();
-
 		ByteBuffer Buffer = ByteBuffer.allocate(RawMessage.length);
 		Buffer.put(RawMessage);
 		Buffer.clear();
@@ -48,9 +46,7 @@ public class DatagramChannelUtils {
 	}
 
 	public static Optional<UdpMessage> Receive(DatagramChannel Channel, int Timeout) {
-
 		final long StartTime = System.currentTimeMillis();
-
 		while (System.currentTimeMillis() - StartTime < Timeout) {
 			ByteBuffer Buffer = ByteBuffer.allocate(UdpMessage.UDP_MESSAGE_MAX_SIZE);
 
@@ -74,7 +70,6 @@ public class DatagramChannelUtils {
 	}
 
 	public static Optional<UdpMessage> ReceiveBlocking(DatagramChannel Channel) {
-		// TODO: Add timeout!
 		while (true) {
 			ByteBuffer Buffer = ByteBuffer.allocate(UdpMessage.UDP_MESSAGE_MAX_SIZE);
 

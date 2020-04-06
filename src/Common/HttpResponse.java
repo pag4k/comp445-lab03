@@ -78,20 +78,24 @@ public class HttpResponse extends HttpMessage {
 
 		i++;
 
+		// If we assume there is no \r\n in body, it takes one line.
 		if (i < Lines.length) {
-			StringBuilder BodyBuilder = new StringBuilder();
-			for (; i < Lines.length; ++i) {
-				BodyBuilder.append(Lines[i] + "\n");
-			}
-			Body = Optional.of(BodyBuilder.toString());
+//			System.out.println("#########");
+//			System.out.println(Lines[i]);
+//			System.out.println("#########");
+//			StringBuilder BodyBuilder = new StringBuilder();
+//			for (; i < Lines.length; ++i) {
+//				BodyBuilder.append(Lines[i] + "\n");
+//			}
+			Body = Optional.of(Lines[i]);
 		}
 
 		int ContentLength = -1;
-		if (HeaderMap.containsKey("Content-Length")) {
+		if (HeaderMap.containsKey(CONTENT_LENGTH_HEADER)) {
 			try {
-				ContentLength = Integer.parseInt(HeaderMap.get("Content-Length"));
+				ContentLength = Integer.parseInt(HeaderMap.get(CONTENT_LENGTH_HEADER));
 			} catch (NumberFormatException e) {
-				Error = Optional.of("ERROR: Invalid Content-Length: " + HeaderMap.get("Content-Length"));
+				Error = Optional.of("ERROR: Invalid Content-Length: " + HeaderMap.get(CONTENT_LENGTH_HEADER));
 				return;
 			}
 		}
@@ -100,6 +104,7 @@ public class HttpResponse extends HttpMessage {
 			if (ContentLength != Body.get().length()) {
 				Error = Optional.of(
 						"ERROR: Content-Length is " + ContentLength + ", but body length is  " + Body.get().length());
+				// System.out.println(Error.get());
 				return;
 			}
 		} else {
@@ -179,7 +184,7 @@ public class HttpResponse extends HttpMessage {
 		// FIXME: Assume it is a valid Response.
 		Bytes.addAll(Arrays.asList(ByteUtils.ToObjects(toString(true).get().getBytes())));
 
-		return ByteUtils.ToPrimitives((Byte[]) Bytes.toArray());
+		return ByteUtils.ToPrimitives(Bytes.toArray());
 	}
 
 	public Optional<String> toString(boolean bVerbose) {

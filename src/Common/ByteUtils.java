@@ -1,16 +1,14 @@
 package Common;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 public class ByteUtils {
-
-	public static byte[] ToPrimitives(Byte[] ByteObjects) {
+	public static byte[] ToPrimitives(Object[] ByteObjects) {
 		byte[] BytePrimitives = new byte[ByteObjects.length];
 
 		for (int i = 0; i < ByteObjects.length; i++) {
-			BytePrimitives[i] = ByteObjects[i];
+			BytePrimitives[i] = (byte) ByteObjects[i];
 		}
 
 		return BytePrimitives;
@@ -24,15 +22,6 @@ public class ByteUtils {
 			ByteObjects[i++] = Byte;
 
 		return ByteObjects;
-	}
-
-	public static Boolean ExtendToSize(List<Byte> InList, int Size) {
-		if (InList.size() > Size) {
-			return false;
-		}
-		List<Byte> AddedList = Collections.nCopies(Size - InList.size(), (byte) 0);
-		InList.addAll(AddedList);
-		return true;
 	}
 
 	public static void AppendTo(List<Byte> InList, byte[] Array) {

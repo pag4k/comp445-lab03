@@ -9,11 +9,6 @@ import Common.HttpResponse;
 
 public class HttpC {
 	public static void main(String args[]) {
-
-		ClientConnection ClientConnection = new ClientConnection(Constants.SERVER_ADDRESS);
-		Thread ClientConnectionThread = new Thread(ClientConnection);
-		ClientConnectionThread.run();
-
 		// Print help.
 		if (args.length > 0 && args[0].equals("help")) {
 			if (args.length > 1) {
@@ -32,18 +27,13 @@ public class HttpC {
 			} else {
 				System.out.println("ERROR: Unknown issue with options.");
 			}
-			// PrintHelp("");
+			PrintHelp("");
 			return;
 		}
 
 		Optional<HttpResponse> Response;
-		try {
-			Response = HttpRequest.Send();
-		} catch (IOException e) {
-			System.out.println("ERROR: Could not send HTTP Request:");
-			e.printStackTrace();
-			return;
-		}
+		ClientConnection ClientConnection = new ClientConnection(Constants.SERVER_ADDRESS);
+		Response = ClientConnection.Send(HttpRequest);
 
 		if (Response.isEmpty() || !Response.get().IsValid()) {
 			// PrintHelp("");
@@ -71,6 +61,8 @@ public class HttpC {
 				return;
 			}
 		}
+
+		System.out.println(Response.get().toString(true).get());
 	}
 
 	public static void PrintHelp(String HttpOperation) {

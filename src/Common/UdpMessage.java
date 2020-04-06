@@ -60,7 +60,7 @@ public class UdpMessage {
 			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
 			return Optional.empty();
 		}
-		if (PayLoad != null && PayLoad.length < PAYLOAD_MAX_SIZE) {
+		if (PayLoad != null && PayLoad.length <= PAYLOAD_MAX_SIZE) {
 			Message.PayLoad = Optional.of(Arrays.copyOf(PayLoad, PayLoad.length));
 		} else if (PayLoad == null) {
 			LOGGER.log(Level.WARNING, "PayLoad is NULL.");
@@ -139,6 +139,22 @@ public class UdpMessage {
 		return Optional.of(Message);
 	}
 
+	public static Optional<UdpMessage> ConstructFinNew(InetAddress Address, int PortNumber) {
+		UdpMessage Message = new UdpMessage();
+		Message.PacketType = EUdpPacketType.Fin;
+		Message.SequenceNumber = 0;
+		Message.AcknowledgmentNumber = 0;
+		Message.Address = Address;
+		if (0 < PortNumber || PortNumber > 65535) {
+			Message.PortNumber = PortNumber;
+		} else {
+			LOGGER.log(Level.WARNING, "PortNumber should be between 0 and 65535.");
+			return Optional.empty();
+		}
+		Message.PayLoad = Optional.empty();
+		return Optional.of(Message);
+	}
+
 	public static Optional<UdpMessage> ConstructFromBytes(byte[] Raw) {
 		if (Raw.length < HEADER_SIZE) {
 			LOGGER.log(Level.WARNING, "Byte array is too short. It does not contain all the header.");
@@ -167,16 +183,16 @@ public class UdpMessage {
 
 		Message.PortNumber = UnsignedByteToInt(Raw[9], Raw[10]);
 
-		if (Raw.length >= HEADER_SIZE) {
+		if (Raw.length > HEADER_SIZE) {
 			int EndIndex = -1;
-			for (int i = Raw.length - 1; i >= HEADER_SIZE; --i) {
+			for (int i = Raw.length - 1; i > HEADER_SIZE - 1; --i) {
 				if (Raw[i] != 0) {
 					EndIndex = i;
 					break;
 				}
 			}
 			if (EndIndex > 0) {
-				Message.PayLoad = Optional.of(Arrays.copyOfRange(Raw, HEADER_SIZE, Raw.length));
+				Message.PayLoad = Optional.of(Arrays.copyOfRange(Raw, HEADER_SIZE, EndIndex + 1));
 			} else {
 				Message.PayLoad = Optional.empty();
 			}
@@ -272,6 +288,10 @@ public class UdpMessage {
 		return PacketType == EUdpPacketType.Data;
 	}
 
+	public Boolean IsFin() {
+		return PacketType == EUdpPacketType.Fin;
+	}
+
 	public int GetSequenceNumber() {
 		return SequenceNumber;
 	}
@@ -296,7 +316,7 @@ public class UdpMessage {
 		Output += "Addr: " + Address.toString() + " ";
 		Output += "Port: " + PortNumber + " ";
 		if (PayLoad.isPresent()) {
-			Output += "PayLoad: " + new String(PayLoad.get());
+			Output += "PayLoad length: " + PayLoad.get().length;// new String(PayLoad.get());
 		} else {
 			Output += "No PayLoad";
 		}

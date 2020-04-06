@@ -1,7 +1,7 @@
 package Common;
 
 public enum EUdpPacketType {
-	Data(1), Ack(2), Syn(3), SynAck(4), Nak(5);
+	Data(1), Ack(2), Syn(3), SynAck(4), Fin(5);
 
 	private int Value;
 
@@ -34,7 +34,7 @@ public enum EUdpPacketType {
 		case 4:
 			return "SYNACK";
 		case 5:
-			return "NAK";
+			return "FIN";
 		}
 		return "ERROR";
 	}

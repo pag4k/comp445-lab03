@@ -10,12 +10,14 @@ import java.util.Optional;
 
 public abstract class HttpMessage {
 
-	protected static final String CONTENT_LENGTH_HEADER = "content-length";
+	protected static final String CONTENT_LENGTH_HEADER = "Content-Length";
 
 	protected Optional<String> Error;
 	protected Optional<String> HttpVersion;
 	protected HashMap<String, String> HeaderMap;
 	protected Optional<String> Body;
+
+	abstract public byte[] GetAsBytes();
 
 	static public Optional<HttpMessage> TryToParse(byte[] Bytes) {
 		final Optional<String> FirstLine = GetFirstLine(Bytes);
@@ -50,7 +52,4 @@ public abstract class HttpMessage {
 		}
 		return Optional.empty();
 	}
-
-	abstract public byte[] GetAsBytes();
-
 }

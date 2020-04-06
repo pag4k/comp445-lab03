@@ -40,73 +40,7 @@ public class HttpProtocol implements Runnable {
 			// Parse Request out of BufferedReader.
 			HttpRequest Request = new HttpRequest(BufferedReader);
 
-			// Add random delay.
-			try {
-				Thread.sleep((int) (Math.random() * MAX_DELAY));
-			} catch (InterruptedException e) {
-			}
-
-			// Generate response base on request.
-			HttpResponse Response = null;
-
-			// Validate Request.
-			if (Request.GetError().isEmpty()) {
-				if (bVerbose) {
-					System.out.println(Request.toString(true).get());
-				}
-			} else {
-				Response = new HttpResponse(400, GenerateErrorHtml(Paths.get("").toAbsolutePath(), 400),
-						TEXT_HTML_FILE_TYPE);
-				return;
-			}
-
-			// Validate path.
-			Path FullPath = RootPath.resolve(Request.GetPath()).normalize();
-			if (!FullPath.startsWith(RootPath)) {
-				FullPath = RootPath;
-			}
-
-			switch (Request.GetOperation()) {
-			case get:
-				if (!Files.exists(FullPath)) {
-					Response = new HttpResponse(404, GenerateErrorHtml(FullPath, 404), TEXT_HTML_FILE_TYPE);
-				} else if (!Files.isReadable(FullPath)) {
-					Response = new HttpResponse(403, GenerateErrorHtml(FullPath, 403), TEXT_HTML_FILE_TYPE);
-				} else if (Files.isRegularFile(FullPath)) {
-					try {
-						final String FileContent = new String(Files.readAllBytes(FullPath));
-						final String FileType = Files.probeContentType(FullPath);
-						if (FileType != null) {
-							Response = new HttpResponse(200, FileContent, FileType);
-						} else {
-							Response = new HttpResponse(200, FileContent);
-						}
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-				} else if (Files.isDirectory(FullPath)) {
-					Response = new HttpResponse(200, GenerateDirectoryHtml(FullPath), TEXT_HTML_FILE_TYPE);
-				} else {
-					assert (false);
-				}
-
-				break;
-			case post:
-				if (!Files.exists(FullPath) || (Files.isRegularFile(FullPath) && Files.isWritable(FullPath))) {
-					try {
-						if (!Files.exists(FullPath.getParent())) {
-							Files.createDirectories(FullPath.getParent());
-						}
-						Files.write(FullPath, Request.GetBody().getBytes());
-						Response = new HttpResponse(201, GeneratePostHtml(FullPath), TEXT_HTML_FILE_TYPE);
-					} catch (IOException e) {
-						Response = new HttpResponse(403, GenerateErrorHtml(FullPath, 403), TEXT_HTML_FILE_TYPE);
-					}
-				} else {
-					Response = new HttpResponse(403, GenerateErrorHtml(FullPath, 403), TEXT_HTML_FILE_TYPE);
-				}
-				break;
-			}
+			HttpResponse Response = GetResponse(RootPath, Request, bVerbose);
 
 			if (Response.GetError().isEmpty()) {
 				if (bVerbose) {
@@ -122,15 +56,9 @@ public class HttpProtocol implements Runnable {
 		} catch (IOException e) {
 			System.out.println("Server error : " + e);
 		}
-
-		// Add random delay.
-		try {
-			Thread.sleep((int) (Math.random() * MAX_DELAY));
-		} catch (InterruptedException e) {
-		}
 	}
 
-	String GenerateDirectoryHtml(Path FullPath) {
+	private static String GenerateDirectoryHtml(Path RootPath, Path FullPath) {
 		StringBuilder StringBuilder = new StringBuilder();
 
 		final String Title = "Directory listing for /" + RootPath.relativize(FullPath).toString();
@@ -163,7 +91,7 @@ public class HttpProtocol implements Runnable {
 		return StringBuilder.toString();
 	}
 
-	private String GeneratePostHtml(Path FullPath) {
+	private static String GeneratePostHtml(Path RootPath, Path FullPath) {
 		StringBuilder StringBuilder = new StringBuilder();
 
 		final String Title = "File posted";
@@ -184,7 +112,7 @@ public class HttpProtocol implements Runnable {
 		return StringBuilder.toString();
 	}
 
-	private String GenerateErrorHtml(Path FullPath, int StatusCode) {
+	private static String GenerateErrorHtml(Path RootPath, Path FullPath, int StatusCode) {
 		StringBuilder StringBuilder = new StringBuilder();
 
 		final String Title = StatusCode + " " + HttpResponse.GetPhrase(StatusCode);
@@ -214,7 +142,72 @@ public class HttpProtocol implements Runnable {
 		} else {
 			return "";
 		}
+	}
 
+	public static HttpResponse GetResponse(Path RootPath, HttpRequest Request, Boolean bVerbose) {
+		// Generate response base on request.
+		HttpResponse Response = null;
+
+		// Validate Request.
+		if (Request.GetError().isEmpty()) {
+			if (bVerbose) {
+				System.out.println(Request.toString(true).get());
+			}
+		} else {
+			Response = new HttpResponse(400, GenerateErrorHtml(RootPath, Paths.get("").toAbsolutePath(), 400),
+					TEXT_HTML_FILE_TYPE);
+			return Response;
+		}
+
+		// Validate path.
+		Path FullPath = RootPath.resolve(Request.GetPath()).normalize();
+		if (!FullPath.startsWith(RootPath)) {
+			FullPath = RootPath;
+		}
+
+		switch (Request.GetOperation()) {
+		case get:
+			if (!Files.exists(FullPath)) {
+				Response = new HttpResponse(404, GenerateErrorHtml(RootPath, FullPath, 404), TEXT_HTML_FILE_TYPE);
+			} else if (!Files.isReadable(FullPath)) {
+				Response = new HttpResponse(403, GenerateErrorHtml(RootPath, FullPath, 403), TEXT_HTML_FILE_TYPE);
+			} else if (Files.isRegularFile(FullPath)) {
+				try {
+					final String FileContent = new String(Files.readAllBytes(FullPath));
+					final String FileType = Files.probeContentType(FullPath);
+					if (FileType != null) {
+						Response = new HttpResponse(200, FileContent, FileType);
+					} else {
+						Response = new HttpResponse(200, FileContent);
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			} else if (Files.isDirectory(FullPath)) {
+				Response = new HttpResponse(200, GenerateDirectoryHtml(RootPath, FullPath), TEXT_HTML_FILE_TYPE);
+			} else {
+				assert (false);
+			}
+
+			break;
+		case post:
+			if (!Files.exists(FullPath) || (Files.isRegularFile(FullPath) && Files.isWritable(FullPath))) {
+				try {
+					if (!Files.exists(FullPath.getParent())) {
+						Files.createDirectories(FullPath.getParent());
+					}
+					Files.write(FullPath, Request.GetBody().getBytes());
+					Response = new HttpResponse(201, GeneratePostHtml(RootPath, FullPath), TEXT_HTML_FILE_TYPE);
+				} catch (IOException e) {
+					Response = new HttpResponse(403, GenerateErrorHtml(RootPath, FullPath, 403), TEXT_HTML_FILE_TYPE);
+				}
+			} else {
+				Response = new HttpResponse(403, GenerateErrorHtml(RootPath, FullPath, 403), TEXT_HTML_FILE_TYPE);
+			}
+			break;
+		}
+
+		return Response;
 	}
 
 }
